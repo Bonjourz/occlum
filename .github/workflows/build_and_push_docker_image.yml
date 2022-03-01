@@ -100,7 +100,7 @@ jobs:
           platforms: linux/amd64
           build-args: OCCLUM_BRANCH=${{ env.OCCLUM_BRANCH }}
           push: true
-          tags: occlum/occlum:${{ env.RELEASE_VERSION }}-ubuntu18.04
+          tags: zhubojun/occlum:${{ env.RELEASE_VERSION }}-ubuntu18.04
 
   generate-ubuntu20-image:
       runs-on: ubuntu-20.04
