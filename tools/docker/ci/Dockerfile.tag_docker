@@ -1,2 +1,2 @@
 ARG INPUT_IMAGE
-FROM $INPUT_IMAGE as base
+FROM zhubojun/$INPUT_IMAGE as base
