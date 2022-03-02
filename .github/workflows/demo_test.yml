@@ -306,14 +306,14 @@ jobs:
 
 # Below tests needs test image to run faster
   Grpc_test:
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-20.04
     steps:
     - uses: actions/checkout@v1
       with:
         submodules: true
 
     - name: Create container
-      run: docker run -itd --name=${{ github.job }} -v $GITHUB_WORKSPACE:/root/occlum occlumbackup/occlum:latest-ubuntu18.04-grpc
+      run: docker run -itd --name=${{ github.job }} -v $GITHUB_WORKSPACE:/root/occlum zhubojun/occlum:latest-ubuntu20.04-grpc
 
     - name: Build dependencies
       run: docker exec ${{ github.job }} bash -c "cd /root/occlum; make submodule"
