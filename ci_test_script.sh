@@ -2,66 +2,101 @@
 
 set -e
 
+WORKDIR=$(cd $(dirname $0); pwd)
 OCCLUM_DIR=/root/occlum
 MODE=HW
+OCCLUM_VERSION=0.28.0$(grep "Version =" src/pal/include/occlum_version.h |  awk '{print $4}')
+CONTAINER_NAME=LOCAL_PKU_TEST
+
+function prepare() {
+    # Create container
+    docker run -itd --name=$CONTAINER_NAME --privileged \
+        --net host \
+        -v /dev/sgx/enclave:/dev/sgx/enclave \
+        -v /dev/sgx/provision:/dev/sgx/provision \
+        -v $WORKDIR:/root/occlum \
+        occlum/occlum:$OCCLUM_VERSION-ubuntu20.04
+
+    # Change download source of crates.io
+    docker exec $CONTAINER_NAME bash -c "cat <<- EOF >/root/.cargo/config
+[source]
+
+[source.mirror]
+registry = \"https://mirrors.sjtug.sjtu.edu.cn/git/crates.io-index/\"
+
+[source.crates-io]
+replace-with = \"mirror\""
+
+    # Work around permission issue
+    docker exec $CONTAINER_NAME bash -c "git config --global --add safe.directory /root/occlum";
+    docker exec $CONTAINER_NAME bash -c "git config --global --add safe.directory /root/occlum/deps/grpc-rust";
+    docker exec $CONTAINER_NAME bash -c "git config --global --add safe.directory /root/occlum/deps/itoa-sgx";
+    docker exec $CONTAINER_NAME bash -c "git config --global --add safe.directory /root/occlum/deps/resolv-conf";
+    docker exec $CONTAINER_NAME bash -c "git config --global --add safe.directory /root/occlum/deps/ringbuf";
+    docker exec $CONTAINER_NAME bash -c "git config --global --add safe.directory /root/occlum/deps/rust-sgx-sdk";
+    docker exec $CONTAINER_NAME bash -c "git config --global --add safe.directory /root/occlum/deps/sefs";
+    docker exec $CONTAINER_NAME bash -c "git config --global --add safe.directory /root/occlum/deps/serde-json-sgx";
+    docker exec $CONTAINER_NAME bash -c "git config --global --add safe.directory /root/occlum/deps/serde-sgx"
+
+    # Build dependencies
+    docker exec $CONTAINER_NAME bash -c "cargo uninstall sccache || true; cd /root/occlum; make submodule"
+}
+
+function rm_container() {
+    docker rm -f $CONTAINER_NAME
+}
 
 # - name: C test
 function c_test() {
-    pushd $OCCLUM_DIR/demos/hello_c
-    make
-    if [ -d occlum_instance ]; then
-        rm -r occlum_instance
-    fi
-    occlum new occlum_instance
-    pushd occlum_instance
-    rm -rf image
-    copy_bom -f ../hello.yaml --root image --include-dir /opt/occlum/etc/template
-    occlum build
-    occlum run /bin/hello_world
-    popd
-    popd
+    docker exec $CONTAINER_NAME bash -c "cd /root/occlum/demos/hello_c && make;
+            occlum new occlum_instance;
+            cd occlum_instance && rm -rf image;
+            copy_bom -f ../hello.yaml --root image --include-dir /opt/occlum/etc/template;
+            SGX_MODE=HW occlum build;
+            occlum run /bin/hello_world"
 }
 
+function demo_test() {
+    prepare
+    c_test
+    rm_container
+}
+
+prepare
+exit 0
+
+# sed -i 's/"pkru": 0/"pkru": 1/g' Occlum.json
+
 #- name: C with encrypted image test
-function c_encrypt_test() {
-    pushd $OCCLUM_DIR/demos/hello_c
-    make
-    if [ -d occlum_instance ]; then
-        rm -r occlum_instance
-    fi
-    occlum new occlum_instance
-    occlum gen-image-key occlum_instance/image_key
-    pushd occlum_instance
-    rm -rf image
-    copy_bom -f ../hello.yaml --root image --include-dir /opt/occlum/etc/template
-    occlum build --image-key ./image_key --buildin-image-key
-    occlum run /bin/hello_world
-    popd
-    popd
+function c_test() {
+    docker exec $CONTAINER_NAME bash -c "cd /root/occlum/demos/hello_c && make;
+            occlum new occlum_instance;
+            cp hello_world occlum_instance/image/bin;
+            cd occlum_instance && occlum build;
+            occlum run /bin/hello_world"
+}
+
+function c_with_encrypted_image_test() {
+    docker exec $CONTAINER_NAME bash -c "cd /root/occlum/demos/hello_c && make;
+            rm -rf occlum_instance && occlum new occlum_instance;
+            occlum gen-image-key occlum_instance/image_key;
+            cp hello_world occlum_instance/image/bin;
+            cd occlum_instance && occlum build --image-key ./image_key --buildin-image-key;
+            occlum run /bin/hello_world"
 }
 
 # - name: C++ test
 function cpp_test() {
-    pushd $OCCLUM_DIR/demos/hello_cc
-    make
-    if [ -d occlum_instance ]; then
-        rm -r occlum_instance
-    fi
-    occlum new occlum_instance
-    pushd occlum_instance
-    rm -rf image
-    copy_bom -f ../hello.yaml --root image --include-dir /opt/occlum/etc/template
-    occlum build
-    occlum run /bin/hello_world
-    popd
-    popd
+    docker exec $CONTAINER_NAME bash -c "cd /root/occlum/demos/hello_cc && make;
+            occlum new occlum_instance;
+            cp hello_world occlum_instance/image/bin;
+            cd occlum_instance && occlum build;
+            occlum run /bin/hello_world"
 }
 
-#- name: Rust test
+#name: Rust test
 function rust_test {
-    pushd $OCCLUM_DIR/demos/rust
-    ./run_rust_demo_on_occlum.sh
-    popd
+    docker exec ${{ env.CONTAINER_NAME }} bash -c "cd /root/occlum/demos/rust && ./run_rust_demo_on_occlum.sh"
 }
 
 # - name: Embedded mode test
