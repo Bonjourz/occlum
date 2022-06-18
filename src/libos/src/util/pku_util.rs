@@ -23,7 +23,6 @@ pub fn try_set_pku_enabled() {
         pku_enabled = 1;
     }
     assert!(PKU_ENABLED.load(Ordering::Relaxed) == false);
-    debug!("pku has been enabled");
     PKU_ENABLED.store(true, Ordering::Release);
 }
 
