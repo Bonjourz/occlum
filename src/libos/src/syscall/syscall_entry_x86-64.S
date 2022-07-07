@@ -148,13 +148,14 @@ __occlum_sysret:
     push %rax
     mov pku_enabled(%rip), %rax
     cmp $1, %rax
-    pop %rax
     je update_pkru_in_sysret
+    pop %rax
     jmp *%gs:(TD_SYSCALL_RET_ADDR_OFFSET)
     // This should never happen
     ud2
 
 update_pkru_in_sysret:
+    pop %rax
     sub $0x20, %rsp
     mov %rax, (%rsp)
     mov %rdx, 0x8(%rsp)
